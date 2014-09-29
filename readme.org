@@ -1,0 +1,52 @@
+* trivial-crypto
+
+Just a simple library for encrypting strings via DES or AES-256, such
+as it is. Makes no claims about whether or not these schemes are a
+good idea.
+
+Also provides no handling for the shared secret. Assumes the caller
+pulls that out of somewhere itself and then supplies it.
+
+Mainly, this is just some code to remind me how this stuff is (or
+might be (or once was)) done.
+
+** Usage
+
+Something like:
+
+#+begin_src clojure
+> (require '[crypto.core :refer [make-cryptor decrypt encrypt]))
+
+;; Types :aes or :des.
+> (def cx (make-crypto :aes "secret-password"))
+
+> (encrypt cx "Hello, World!")
+"dc144779e95078104017c2fe71ed9449"
+
+> (decrypt cx "dc144779e95078104017c2fe71ed9449")
+"Hello, World!"
+#+end_src
+
+That's it!
+
+** Possibilities
+
+I'd like to add a function that will walk a tree of maps encrypting
+(or decrypting) every key name ~:password~. The idea is that you load
+in a configuration with encrypted passwords, decrypt them for use,
+then, when you save it, encrypt them back.
+
+Why not just pull the passwords out via a path and decrypt them when
+you need them? Well, that makes a lot of sense.
+
+Why not hash the passwords? Assume they're credentials that need to be
+used for, say, database connections. Not log-in creds. And say that
+the passwords are provided by users rather than configured by system
+administrators.
+
+** License
+
+Copyright (c) 2014 Keith Irwin
+
+Distributed under the Eclipse Public License either version 1.0 or (at
+your option) any later version.
