@@ -18,6 +18,19 @@
 (def ^:private key-len
   256)
 
+(defn bytes->hex
+  [bytes]
+  (->> bytes (map (partial format "%02x")) (apply str)))
+
+(defn hex->bytes
+  [s]
+  (letfn [(->byte [c1 c2]
+            (unchecked-byte
+             (+ (bit-shift-left (Character/digit c1 16) 4)
+                (Character/digit c2 16))))]
+    (-> (mapv #(apply ->byte %) (partition 2 s))
+        (byte-array))))
+
 (defn- iv-params
   [encryptor]
   (-> (.getParameters encryptor)
@@ -28,7 +41,7 @@
 (defn- des-cipher
   [passphrase]
   (let [factory (SecretKeyFactory/getInstance "DES")
-        spec (DESKeySpec. (.getBytes passphrase))
+        spec (DESKeySpec. passphrase)
         tmp (.generateSecret factory spec)
         secret (SecretKeySpec. (.getEncoded tmp) "DES")
         encipher (doto (Cipher/getInstance "DES/ECB/PKCS5Padding")
@@ -40,7 +53,8 @@
 (defn- aes-cipher
   [passphrase]
   (let [factory (SecretKeyFactory/getInstance "PBKDF2WithHmacSHA1")
-        spec (PBEKeySpec. (.toCharArray passphrase) salt iterations key-len)
+        spec (PBEKeySpec. (.toCharArray (String. passphrase))
+                          salt iterations key-len)
         tmp (.generateSecret factory spec)
         secret (SecretKeySpec. (.getEncoded tmp) "AES")
         encipher (doto (Cipher/getInstance "AES/CBC/PKCS5Padding")
@@ -58,33 +72,21 @@
     :des (des-cipher passphrase)
     (throw (ex-info (format "Bad type: [%s], try [:aes :des]." type) {}))))
 
-(defn bytes->hex
-  [bytes]
-  (->> bytes (map (partial format "%02x")) (apply str)))
-
-(defn hex->bytes
-  [s]
-  (letfn [(->byte [c1 c2]
-            (unchecked-byte
-             (+ (bit-shift-left (Character/digit c1 16) 4)
-                (Character/digit c2 16))))]
-    (-> (mapv #(apply ->byte %) (partition 2 s))
-        (byte-array))))
-
 ;;-----------------------------------------------------------------------------
 
 (defn encrypt
   [{:keys [encryptor]} string]
-  (u/bytes->hex (.doFinal encryptor (.getBytes string "UTF-8"))))
+  (bytes->hex (.doFinal encryptor (.getBytes string "UTF-8"))))
 
 (defn decrypt
   [{:keys [decryptor]} data]
-  (String. (.doFinal decryptor (u/hex->bytes data))))
+  (String. (.doFinal decryptor (hex->bytes data))))
 
 (defn make-crypto
-  [type passphrase]
+  [type passphrase & [{:keys [hex?] :as opts :or [{hex? false}]}]]
   (try
-    (let [[en de] (cipher type passphrase)]
+    (let [secret (if hex? (hex->bytes passphrase) (.getBytes passphrase))
+          [en de] (cipher type secret)]
       {:type type :encryptor en :decryptor de})
     (catch java.security.InvalidKeyException e
       (throw (ex-info "Can't make key. Are the US JCE jars installed?"
